@@ -1,91 +1,134 @@
-import { useState } from 'react'
-import './App.css'
+import { useState } from "react";
+import "./App.css";
+import LiveMode from "./src/LiveMode";
+type Section = {
+  id: number;
+  name: string;
+  type: string;
+  duration: number;
+};
 
 type Song = {
-  id: number
-  name: string
-  artist: string
-  genre: string
-  musical_key: string
-  tempo: number
-  yamaha_style: string
-  notes: string
-}
+  id: number;
+  name: string;
+  artist: string;
+  genre: string;
+  musical_key: string;
+  tempo: number;
+  yamaha_style: string;
+  notes: string;
+  sections: Section[];
+};
 
 const initialSongs: Song[] = [
   {
+    sections: [
+      {
+        id: 1,
+        name: "Intro",
+        type: "intro",
+        duration: 20,
+      },
+      {
+        id: 2,
+        name: "Main Groove",
+        type: "main",
+        duration: 300,
+      },
+      {
+        id: 3,
+        name: "Eulogy",
+        type: "eulogy",
+        duration: 180,
+      },
+      {
+        id: 4,
+        name: "Bridge",
+        type: "bridge",
+        duration: 120,
+      },
+      {
+        id: 5,
+        name: "Outro",
+        type: "outro",
+        duration: 60,
+      },
+    ],
     id: 1,
-    name: 'Ade Ori Okin',
-    artist: 'Traditional',
-    genre: 'Owambe',
-    musical_key: 'G',
+    name: "Ade Ori Okin",
+    artist: "Traditional",
+    genre: "Owambe",
+    musical_key: "G",
     tempo: 102,
-    yamaha_style: 'Tungba',
-    notes: 'Main performance song',
+    yamaha_style: "Tungba",
+    notes: "Main performance song",
   },
-]
+];
 
 function App() {
-  const [songs, setSongs] = useState<Song[]>(initialSongs)
-  const [showForm, setShowForm] = useState(false)
-
+  const [songs, setSongs] = useState<Song[]>(initialSongs);
+  const [showForm, setShowForm] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [form, setForm] = useState({
-    name: '',
-    artist: '',
-    genre: '',
-    musical_key: 'C',
+    name: "",
+    artist: "",
+    genre: "",
+    musical_key: "C",
     tempo: 100,
-    yamaha_style: '',
-    notes: '',
-  })
+    yamaha_style: "",
+    notes: "",
+  });
 
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    >,
   ) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
 
     setForm((previous) => ({
       ...previous,
-      [name]: name === 'tempo' ? Number(value) : value,
-    }))
-  }
+      [name]: name === "tempo" ? Number(value) : value,
+    }));
+  };
 
   const addSong = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!form.name.trim()) {
-      alert('Please enter a song name.')
-      return
+      alert("Please enter a song name.");
+      return;
     }
 
     const newSong: Song = {
       id: Date.now(),
       ...form,
-    }
+      sections: [],
+    };
 
-    setSongs((previous) => [...previous, newSong])
+    setSongs((previous) => [...previous, newSong]);
 
     setForm({
-      name: '',
-      artist: '',
-      genre: '',
-      musical_key: 'C',
+      name: "",
+      artist: "",
+      genre: "",
+      musical_key: "C",
       tempo: 100,
-      yamaha_style: '',
-      notes: '',
-    })
+      yamaha_style: "",
+      notes: "",
+    });
 
-    setShowForm(false)
-  }
+    setShowForm(false);
+  };
 
   const deleteSong = (id: number) => {
-    setSongs((previous) =>
-      previous.filter((song) => song.id !== id)
-    )
+    setSongs((previous) => previous.filter((song) => song.id !== id));
+  };
+  if (selectedSong) {
+    return (
+      <LiveMode song={selectedSong} onBack={() => setSelectedSong(null)} />
+    );
   }
-
   return (
     <div className="app">
       <header className="topbar">
@@ -94,10 +137,7 @@ function App() {
           <p>One-Man Band Performance System</p>
         </div>
 
-        <button
-          className="add-button"
-          onClick={() => setShowForm(true)}
-        >
+        <button className="add-button" onClick={() => setShowForm(true)}>
           + Add Song
         </button>
       </header>
@@ -106,9 +146,7 @@ function App() {
         <section className="welcome">
           <div>
             <h2>Song Library</h2>
-            <p>
-              Prepare your songs, grooves and performance sections.
-            </p>
+            <p>Prepare your songs, grooves and performance sections.</p>
           </div>
 
           <div className="song-count">
@@ -231,10 +269,7 @@ function App() {
                     Cancel
                   </button>
 
-                  <button
-                    type="submit"
-                    className="save-button"
-                  >
+                  <button type="submit" className="save-button">
                     Save Song
                   </button>
                 </div>
@@ -250,10 +285,7 @@ function App() {
               <h3>No songs yet</h3>
               <p>Add your first song to start building your live set.</p>
 
-              <button
-                className="add-button"
-                onClick={() => setShowForm(true)}
-              >
+              <button className="add-button" onClick={() => setShowForm(true)}>
                 + Add Your First Song
               </button>
             </div>
@@ -271,13 +303,8 @@ function App() {
                       ×
                     </button>
                   </div>
-
                   <h3>{song.name}</h3>
-
-                  <p className="artist">
-                    {song.artist || 'Unknown Artist'}
-                  </p>
-
+                  <p className="artist">{song.artist || "Unknown Artist"}</p>
                   <div className="song-details">
                     <div>
                       <span>KEY</span>
@@ -291,15 +318,15 @@ function App() {
 
                     <div>
                       <span>STYLE</span>
-                      <strong>
-                        {song.yamaha_style || '—'}
-                      </strong>
+                      <strong>{song.yamaha_style || "—"}</strong>
                     </div>
                   </div>
-
-                  <button className="live-button">
+                  <button
+                    className="live-button"
+                    onClick={() => setSelectedSong(song)}
+                  >
                     Open Live Mode →
-                  </button>
+                  </button>{" "}
                 </article>
               ))}
             </div>
@@ -307,7 +334,7 @@ function App() {
         </section>
       </main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
