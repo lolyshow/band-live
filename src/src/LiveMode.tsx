@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+
 type Section = {
   id: number;
   name: string;
@@ -20,6 +21,14 @@ type Props = {
   onBack: () => void;
 };
 
+type AudioLayer = {
+  id: string;
+  name: string;
+  file: string;
+  volume: number;
+  enabled: boolean;
+};
+
 function LiveMode({ song, onBack }: Props) {
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -35,6 +44,24 @@ function LiveMode({ song, onBack }: Props) {
     bridge: "/audio/ade-ori-okin/bridge.mp3",
     outro: "/audio/ade-ori-okin/outro.mp3",
   };
+
+  const [layers, setLayers] = useState<AudioLayer[]>([
+    {
+      id: "guitar",
+      name: "Guitar",
+      file: "/audio/ade-ori-okin/main/guitar.mp3",
+      volume: 1,
+      enabled: true,
+    },
+    {
+      id: "talking-drum",
+      name: "Talking Drum",
+      file: "/audio/ade-ori-okin/main/talking-drum.mp3",
+      volume: 1,
+      enabled: true,
+    },
+  ]);
+  const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
 
   useEffect(() => {
     if (!playing) return;
@@ -59,57 +86,128 @@ function LiveMode({ song, onBack }: Props) {
     setCurrentSection(section);
     setElapsed(0);
 
-    const audio = audioRef.current;
+    // Get the audio layers for the section we clicked
+    const newLayers = getLayersForSection(section.type);
 
-    if (!audio) return;
+    // Stop the currently playing layers
+    Object.values(audioRefs.current).forEach((audio) => {
+      if (!audio) return;
 
-    const source = audioFiles[section.type];
+      audio.pause();
+      audio.currentTime = 0;
+    });
 
-    if (!source) return;
+    // Update the layers
+    setLayers(newLayers);
 
-    const wasPlaying = !audio.paused;
+    // If we weren't playing, don't automatically start
+    if (!playing) return;
 
-    audio.pause();
+    // Give React a moment to render the new audio elements
+    setTimeout(async () => {
+      const newAudioPlayers = Object.values(audioRefs.current).filter(
+        (audio): audio is HTMLAudioElement => audio !== null,
+      );
 
-    audio.src = source;
-    audio.load();
-
-    if (wasPlaying) {
       try {
-        await audio.play();
-        setPlaying(true);
+        await Promise.all(
+          newAudioPlayers.map((audio) => {
+            audio.volume = 1;
+            return audio.play();
+          }),
+        );
       } catch (error) {
-        console.error("Unable to play audio:", error);
-        setPlaying(false);
+        console.error("Unable to switch section:", error);
       }
-    }
+    }, 100);
   };
 
   const stop = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
+    Object.values(audioRefs.current).forEach((audio) => {
+      if (!audio) return;
+
+      audio.pause();
+      audio.currentTime = 0;
+    });
 
     setPlaying(false);
     setElapsed(0);
   };
 
   const togglePlay = async () => {
-    if (!audioRef.current) return;
+    const audioPlayers = Object.values(audioRefs.current).filter(
+      (audio): audio is HTMLAudioElement => audio !== null,
+    );
 
     if (playing) {
-      audioRef.current.pause();
+      audioPlayers.forEach((audio) => {
+        audio.pause();
+      });
+
       setPlaying(false);
-    } else {
-      await audioRef.current.play();
+      return;
+    }
+
+    try {
+      await Promise.all(audioPlayers.map((audio) => audio.play()));
+
       setPlaying(true);
+    } catch (error) {
+      console.error("Unable to start audio layers:", error);
+    }
+  };
+
+  const getLayersForSection = (sectionType: string): AudioLayer[] => {
+    switch (sectionType) {
+      case "main":
+        return [
+          {
+            id: "guitar",
+            name: "Guitar",
+            file: "/audio/ade-ori-okin/main/guitar.mp3",
+            volume: 1,
+            enabled: true,
+          },
+          {
+            id: "talking-drum",
+            name: "Talking Drum",
+            file: "/audio/ade-ori-okin/main/talking-drum.mp3",
+            volume: 1,
+            enabled: true,
+          },
+        ];
+
+      case "eulogy":
+        return [
+          {
+            id: "guitar",
+            name: "Guitar",
+            file: "/audio/ade-ori-okin/eulogy/guitar.mp3",
+            volume: 1,
+            enabled: true,
+          },
+        ];
+
+      default:
+        return [];
     }
   };
 
   return (
     <div className="live-mode">
       <audio ref={audioRef} loop />{" "}
+      <div className="audio-layers">
+        {layers.map((layer) => (
+          <audio
+            key={layer.id}
+            ref={(element) => {
+              audioRefs.current[layer.id] = element;
+            }}
+            src={layer.file}
+            loop
+          />
+        ))}
+      </div>
       <header className="live-header">
         <button className="back-button" onClick={onBack}>
           ← Songs
@@ -165,6 +263,69 @@ function LiveMode({ song, onBack }: Props) {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="layers-panel">
+          <h2>Instrument Layers</h2>
+
+          {layers.map((layer) => (
+            <div key={layer.id} className="layer-row">
+              <button
+                onClick={() => {
+                  const newEnabled = !layer.enabled;
+
+                  setLayers((previous) =>
+                    previous.map((item) =>
+                      item.id === layer.id
+                        ? {
+                            ...item,
+                            enabled: newEnabled,
+                          }
+                        : item,
+                    ),
+                  );
+
+                  const audio = audioRefs.current[layer.id];
+
+                  if (audio) {
+                    audio.muted = !newEnabled;
+                  }
+                }}
+              >
+                {layer.enabled ? "🔊" : "🔇"}
+              </button>
+
+              <span>{layer.name}</span>
+
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={layer.volume}
+                onChange={(event) => {
+                  const volume = Number(event.target.value);
+
+                  setLayers((previous) =>
+                    previous.map((item) =>
+                      item.id === layer.id
+                        ? {
+                            ...item,
+                            volume,
+                          }
+                        : item,
+                    ),
+                  );
+
+                  const audio = audioRefs.current[layer.id];
+
+                  if (audio) {
+                    audio.volume = volume;
+                  }
+                }}
+              />
+            </div>
+          ))}
         </section>
 
         <section className="performance-info">
