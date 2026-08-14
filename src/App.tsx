@@ -1,69 +1,8 @@
 import { useState } from "react";
 import "./App.css";
-import LiveMode from "./src/LiveMode";
-type Section = {
-  id: number;
-  name: string;
-  type: string;
-  duration: number;
-};
-
-type Song = {
-  id: number;
-  name: string;
-  artist: string;
-  genre: string;
-  musical_key: string;
-  tempo: number;
-  yamaha_style: string;
-  notes: string;
-  sections: Section[];
-};
-
-const initialSongs: Song[] = [
-  {
-    sections: [
-      {
-        id: 1,
-        name: "Intro",
-        type: "intro",
-        duration: 20,
-      },
-      {
-        id: 2,
-        name: "Main Groove",
-        type: "main",
-        duration: 300,
-      },
-      {
-        id: 3,
-        name: "Eulogy",
-        type: "eulogy",
-        duration: 180,
-      },
-      {
-        id: 4,
-        name: "Bridge",
-        type: "bridge",
-        duration: 120,
-      },
-      {
-        id: 5,
-        name: "Outro",
-        type: "outro",
-        duration: 60,
-      },
-    ],
-    id: 1,
-    name: "Ade Ori Okin",
-    artist: "Traditional",
-    genre: "Owambe",
-    musical_key: "G",
-    tempo: 102,
-    yamaha_style: "Tungba",
-    notes: "Main performance song",
-  },
-];
+import LiveMode from "./LiveMode";
+import type { Song, Section } from "./types";
+import { songs as initialSongs } from "./data/songs";
 
 function App() {
   const [songs, setSongs] = useState<Song[]>(initialSongs);
@@ -74,7 +13,7 @@ function App() {
     artist: "",
     genre: "",
     musical_key: "C",
-    tempo: 100,
+    bpm: 100,
     yamaha_style: "",
     notes: "",
   });
@@ -113,7 +52,7 @@ function App() {
       artist: "",
       genre: "",
       musical_key: "C",
-      tempo: 100,
+      bpm: 100,
       yamaha_style: "",
       notes: "",
     });
@@ -233,7 +172,7 @@ function App() {
                       name="tempo"
                       min="40"
                       max="240"
-                      value={form.tempo}
+                      value={form.bpm}
                       onChange={handleChange}
                     />
                   </label>
@@ -313,7 +252,7 @@ function App() {
 
                     <div>
                       <span>BPM</span>
-                      <strong>{song.tempo}</strong>
+                      <strong>{song.bpm}</strong>
                     </div>
 
                     <div>

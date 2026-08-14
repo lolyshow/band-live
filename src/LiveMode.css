@@ -1,0 +1,40 @@
+.beat-clock {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: #111;
+}
+
+.tempo {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.bar-info {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.beats {
+  display: flex;
+  gap: 10px;
+}
+
+.beat {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  transition: 0.1s;
+}
+
+.beat.active {
+  background: #fff;
+  color: #111;
+  transform: scale(1.15);
+}

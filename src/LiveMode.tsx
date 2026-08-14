@@ -1,77 +1,112 @@
 import { useEffect, useState, useRef } from "react";
-
-type Section = {
-  id: number;
-  name: string;
-  type: string;
-  duration: number;
-};
-
-type Song = {
-  name: string;
-  artist: string;
-  musical_key: string;
-  tempo: number;
-  yamaha_style: string;
-  sections: Section[];
-};
-
+import type { Song, Section, AudioLayer } from "./types";
+import { AudioEngine } from "./audio/AudioEngine";
+import "./LiveMode.css";
 type Props = {
   song: Song;
   onBack: () => void;
 };
 
-type AudioLayer = {
-  id: string;
-  name: string;
-  file: string;
-  volume: number;
-  enabled: boolean;
-};
-
 function LiveMode({ song, onBack }: Props) {
+  console.log("LIVE SONG:", song);
+  console.log("LIVE SECTIONS:", song.sections);
+  console.log("FIRST SECTION:", song.sections[0]);
+  console.log("FIRST SECTION LAYERS:", song.sections[0]?.layers);
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentBeat, setCurrentBeat] = useState(1);
+  const [currentBar, setCurrentBar] = useState(1);
+  const audioEngine = useRef<AudioEngine | null>(null);
   const [currentSection, setCurrentSection] = useState<Section | null>(
     song.sections[0] || null,
   );
+  const [pendingSection, setPendingSection] = useState<Section | null>(null);
 
-  const audioFiles: Record<string, string> = {
-    intro: "/audio/ade-ori-okin/intro.mp3",
-    main: "/audio/ade-ori-okin/main.mp3",
-    eulogy: "/audio/ade-ori-okin/eulogy.mp3",
-    bridge: "/audio/ade-ori-okin/bridge.mp3",
-    outro: "/audio/ade-ori-okin/outro.mp3",
-  };
-
-  const [layers, setLayers] = useState<AudioLayer[]>([
-    {
-      id: "guitar",
-      name: "Guitar",
-      file: "/audio/ade-ori-okin/main/guitar.mp3",
-      volume: 1,
-      enabled: true,
-    },
-    {
-      id: "talking-drum",
-      name: "Talking Drum",
-      file: "/audio/ade-ori-okin/main/talking-drum.mp3",
-      volume: 1,
-      enabled: true,
-    },
-  ]);
+  const [layers, setLayers] = useState<AudioLayer[]>(
+    song.sections[0]?.layers ?? [],
+  );
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
+  if (!audioEngine.current) {
+    audioEngine.current = new AudioEngine();
+  }
 
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || !currentSection) return;
 
-    const timer = setInterval(() => {
-      setElapsed((previous) => previous + 1);
-    }, 1000);
+    let animationFrame: number;
 
-    return () => clearInterval(timer);
-  }, [playing]);
+    const updateClock = () => {
+      const currentTime = audioEngine.current?.getCurrentTime() ?? 0;
+
+      setElapsed(currentTime);
+
+      const beatDuration = 60 / currentSection.bpm;
+
+      const totalBeats = Math.floor(currentTime / beatDuration);
+
+      const beat = (totalBeats % 4) + 1;
+      const bar = Math.floor(totalBeats / 4) + 1;
+
+      setCurrentBeat(beat);
+      setCurrentBar(bar);
+
+      animationFrame = requestAnimationFrame(updateClock);
+    };
+
+    animationFrame = requestAnimationFrame(updateClock);
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [playing, currentSection]);
+
+  useEffect(() => {
+    if (!playing || !currentSection || !pendingSection) return;
+
+    // We only switch when the current bar has finished.
+    if (currentBeat !== 4) return;
+
+    const beatDuration = 60 / currentSection.bpm;
+    const currentTime = audioEngine.current?.getCurrentTime() ?? 0;
+
+    const beatsInCurrentBar = Math.floor(currentTime / beatDuration) % 4;
+
+    // Wait until beat 4 has actually completed
+    if (beatsInCurrentBar !== 3) return;
+
+    const nextSection = pendingSection;
+
+    console.log("BAR TRANSITION:", currentSection.name, "→", nextSection.name);
+
+    audioEngine.current?.stopAll();
+
+    setElapsed(0);
+    setCurrentBeat(1);
+    setCurrentBar(1);
+
+    setPendingSection(null);
+    setCurrentSection(nextSection);
+
+    audioEngine.current?.loadLayers(nextSection.layers);
+
+    audioEngine.current
+      ?.play()
+      .then(() => {
+        setPlaying(true);
+      })
+      .catch((error) => {
+        console.error("TRANSITION PLAY ERROR:", error);
+        setPlaying(false);
+      });
+  }, [currentBeat, playing, currentSection, pendingSection]);
+
+  useEffect(() => {
+    if (!playing || !currentSection) return;
+
+    if (elapsed >= currentSection.duration) {
+      moveToNextSection();
+    }
+  }, [elapsed, playing, currentSection]);
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -82,44 +117,77 @@ function LiveMode({ song, onBack }: Props) {
       .padStart(2, "0")}`;
   };
 
-  const selectSection = async (section: Section) => {
-    setCurrentSection(section);
+  const selectSection = (section: Section) => {
+    if (!currentSection) return;
+
+    // If we're stopped, switch immediately
+    if (!playing) {
+      setCurrentSection(section);
+      setElapsed(0);
+      setCurrentBeat(1);
+      setCurrentBar(1);
+
+      audioEngine.current?.stopAll();
+      audioEngine.current?.loadLayers(section.layers);
+
+      audioEngine.current?.play();
+
+      setPlaying(true);
+      return;
+    }
+
+    // If already playing, wait until the current bar finishes
+    console.log("SECTION QUEUED:", currentSection.name, "→", section.name);
+
+    setPendingSection(section);
+  };
+
+  const moveToNextSection = async () => {
+    if (!currentSection) return;
+
+    const currentIndex = song.sections.findIndex(
+      (section) => section.id === currentSection.id,
+    );
+
+    const nextSection = song.sections[currentIndex + 1];
+
+    if (!nextSection) {
+      audioEngine.current?.stopAll();
+
+      setPlaying(false);
+      setElapsed(0);
+      setCurrentBeat(1);
+      setCurrentBar(1);
+
+      return;
+    }
+
+    console.log("AUTO SWITCH:", currentSection.name, "→", nextSection.name);
+
+    // Stop current section
+    audioEngine.current?.stopAll();
+
+    // Reset visual clock
     setElapsed(0);
+    setCurrentBeat(1);
+    setCurrentBar(1);
 
-    // Get the audio layers for the section we clicked
-    const newLayers = getLayersForSection(section.type);
+    // Change section
+    setCurrentSection(nextSection);
 
-    // Stop the currently playing layers
-    Object.values(audioRefs.current).forEach((audio) => {
-      if (!audio) return;
+    // Load new section
+    audioEngine.current?.loadLayers(nextSection.layers);
 
-      audio.pause();
-      audio.currentTime = 0;
-    });
+    try {
+      await audioEngine.current?.play();
 
-    // Update the layers
-    setLayers(newLayers);
+      setPlaying(true);
 
-    // If we weren't playing, don't automatically start
-    if (!playing) return;
-
-    // Give React a moment to render the new audio elements
-    setTimeout(async () => {
-      const newAudioPlayers = Object.values(audioRefs.current).filter(
-        (audio): audio is HTMLAudioElement => audio !== null,
-      );
-
-      try {
-        await Promise.all(
-          newAudioPlayers.map((audio) => {
-            audio.volume = 1;
-            return audio.play();
-          }),
-        );
-      } catch (error) {
-        console.error("Unable to switch section:", error);
-      }
-    }, 100);
+      console.log("AUTO SECTION PLAYING:", nextSection.name);
+    } catch (error) {
+      console.error("AUTO SECTION PLAY ERROR:", error);
+      setPlaying(false);
+    }
   };
 
   const stop = () => {
@@ -134,26 +202,34 @@ function LiveMode({ song, onBack }: Props) {
     setElapsed(0);
   };
 
+  const stopPlayback = () => {
+    audioEngine.current?.stopAll();
+
+    setPlaying(false);
+    setElapsed(0);
+    setCurrentBeat(1);
+    setCurrentBar(1);
+  };
+
   const togglePlay = async () => {
-    const audioPlayers = Object.values(audioRefs.current).filter(
-      (audio): audio is HTMLAudioElement => audio !== null,
-    );
-
-    if (playing) {
-      audioPlayers.forEach((audio) => {
-        audio.pause();
-      });
-
-      setPlaying(false);
-      return;
-    }
+    if (!audioEngine.current || !currentSection) return;
 
     try {
-      await Promise.all(audioPlayers.map((audio) => audio.play()));
+      if (playing) {
+        audioEngine.current.pause();
+        setPlaying(false);
+        return;
+      }
+
+      if (!audioEngine.current.hasLayers()) {
+        audioEngine.current.loadLayers(currentSection.layers);
+      }
+
+      await audioEngine.current.play();
 
       setPlaying(true);
     } catch (error) {
-      console.error("Unable to start audio layers:", error);
+      console.error("PLAY ERROR:", error);
     }
   };
 
@@ -195,7 +271,6 @@ function LiveMode({ song, onBack }: Props) {
 
   return (
     <div className="live-mode">
-      <audio ref={audioRef} loop />{" "}
       <div className="audio-layers">
         {layers.map((layer) => (
           <audio
@@ -218,7 +293,7 @@ function LiveMode({ song, onBack }: Props) {
           <span>{song.artist}</span>
         </div>
 
-        <div className="live-bpm">{song.tempo} BPM</div>
+        <div className="live-bpm">{song.bpm} BPM</div>
       </header>
       <main className="performance">
         <div className="status">
@@ -232,7 +307,7 @@ function LiveMode({ song, onBack }: Props) {
         <div className="transport">
           <button onClick={() => setElapsed(0)}>↺</button>
 
-          <button className="stop-button" onClick={stop}>
+          <button className="stop-button" onClick={stopPlayback}>
             ■
           </button>
 
@@ -246,6 +321,10 @@ function LiveMode({ song, onBack }: Props) {
             <h2>Performance Sections</h2>
 
             <span>{currentSection?.name || "No section selected"}</span>
+
+            {pendingSection && (
+              <span className="pending-section">→ {pendingSection.name}</span>
+            )}
           </div>
 
           <div className="section-buttons">
@@ -336,7 +415,7 @@ function LiveMode({ song, onBack }: Props) {
 
           <div>
             <span>BPM</span>
-            <strong>{song.tempo}</strong>
+            <strong>{song.bpm}</strong>
           </div>
 
           <div>
@@ -349,6 +428,23 @@ function LiveMode({ song, onBack }: Props) {
             <strong>{currentSection?.name || "—"}</strong>
           </div>
         </section>
+
+        <div className="beat-clock">
+          <div className="tempo">{currentSection?.bpm ?? song.bpm} BPM</div>
+
+          <div className="bar-info">Bar {currentBar}</div>
+
+          <div className="beats">
+            {[1, 2, 3, 4].map((beat) => (
+              <span
+                key={beat}
+                className={beat === currentBeat ? "beat active" : "beat"}
+              >
+                {beat}
+              </span>
+            ))}
+          </div>
+        </div>
       </main>
     </div>
   );
